@@ -1,0 +1,129 @@
+---
+title: "ISLR tidymodels Labs -- Linear Regression"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Kap 3 Linear Regression
+```{r}
+library(MASS)
+library(tidymodels)
+library(ISLR)
+```
+
+## Simple linear regression
+
+- Parsnip specification
+Package with functions commonly used during model fitting
+
+```{r}
+lm_spec <- 
+  # linear_reg() = Interface für Lineare Regression
+  parsnip::linear_reg() %>%
+  # Welche Methode Regression/Classification ...
+  # In diesem Fall vernachlässsigbar da nur Regression möglich aber egal
+  set_mode("regression") %>%
+  # welches Package
+  set_engine("lm")
+
+lm_spec()
+```
+
+Zuerst wird das modell Definiert hier wird noch nicths gerechnet
+
+- nächster Schritt fit 
+
+```{r}
+
+head(Boston)
+
+lm_fit <- lm_spec %>%
+  fit(medv ~ lstat, data = Boston)
+
+# Einfache Rückmeldung
+lm_fit
+
+#detailierte Rückmeldung
+lm_fit %>% 
+  pluck("fit") %>%
+  summary()
+
+# oder noch besser mit broom()
+broom::tidy(lm_fit)
+
+# und tidy model parameter
+broom::glance(lm_fit)
+```
+
+```{r}
+
+parsnip::predict(lm_fit, new_data = Boston)
+
+#mit Konfidenzintervall
+predict(lm_fit, new_data = Boston, type = "conf_int")
+```
+
+## Multiple Linear Regression
+Funktioniert gleich ~. Steht für alle Variablen
+
+```{r}
+lm_fit3 <- lm_spec %>% 
+  fit(medv ~ ., data = Boston)
+
+lm_fit3 %>% 
+  pluck("fit") %>%
+  summary()
+```
+
+ Interaktionen funktionieren gleich wie beim schnöden lm()
+ x:y will include the interaction between x and y,
+x * y will include the interaction between x and y, x, and y, e.i. it is short for x:y + x + y.
+
+## Model pre processing unsing recipes 
+Es sollen so viele Pre Processing Schritte wie möglich im Rezept definiert werden so dass sie immer gleich gemacht werden, unabhängig von Daten oder Modellen
+
+https://recipes.tidymodels.org/reference/index.html#section-step-functions-individual-transformations
+
+```{r}
+# ML Rezept
+rec_spec_interact  <- recipes::recipe(medv ~ lstat + age, data = Boston) %>%
+  # Fügt dem Rezept einen Pre Przessing schritt hinzu interaktionen
+  step_interact(~ lstat:age)
+
+  #Fügt alle informationen zusammeen 
+  workflow() %>%
+  add_model(lm_spec) %>%
+  add_recipe(rec_spec_interact) %>% 
+  fit(Boston)
+
+```
+
+## Qualitative Variablen (nominal)
+
+We will now turn our attention to the Carseats data set. We will attempt to predict Sales of child car seats in 400 locations based on a number of predictors. One of these variables is ShelveLoc which is a qualitative predictor that indicates the quality of the shelving location. ShelveLoc takes on three possible values
+```{r}
+Carseats %>%
+  pull(ShelveLoc) %>%
+  contrasts()
+
+lm_spec %>% 
+  fit(Sales ~ . + Income:Advertising + Price:Age, data = Carseats)
+
+```
+
+Das Funktioniert gut bei lm muss aber bei anderen Modellen nicht funktionieren daher ist es besser die mittes Pre-Processing step umzuwandeln
+
+```{r}
+rec_spec <- recipe(Sales ~ ., data = Carseats) %>%
+  # verwandelt nominale Daten in numerische binär terme 
+  step_dummy(all_nominal()) %>%
+  step_interact(~ Income:Advertising + Price:Age)
+
+lm_wf <- workflow() %>%
+  add_model(lm_spec) %>%
+  add_recipe(rec_spec)
+
+lm_wf %>% fit(Carseats)
+```
+
